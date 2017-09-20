@@ -7,18 +7,18 @@ import json
 import pymel.core as pm
 
 # Info
-__author__   = 'Disco Hammer'
+__author__ = 'Disco Hammer'
 __copyright__ = 'Copyright 2017,  Dragon Unit Framestore LDN 2017'
 __version__ = '0.1'
 __email__ = 'gsorchin@framestore.com'
 __status__ = 'Prototype'
 
-#-Globals-#
+# - Globals - #
 tPREFIX = 'target_'
 lPREFIX = 'loc_'
 
-class CpSourceMesh(object):
 
+class CpSourceMesh(object):
 
     def __init__(self, mesh):
         self.name = mesh
@@ -29,17 +29,15 @@ class CpSourceMesh(object):
         self.loc_helpers = None
         self.vertex_weights = None
 
-    #---Private methods---#
+    # ---Private methods--- #
 
     def _get_skin_cluster(self):
         for node in self.mesh.connections():
             if node.nodeType() == 'skinCluster':
                 return node
 
-
     def _get_root_joint(self):
         return self.skin_cluster.getInfluence()[0]
-
 
     def _get_joint_hierarchy(self, root_joint):
 
@@ -56,7 +54,7 @@ class CpSourceMesh(object):
 
         return hierarchy, positions
 
-    #---Public methods---#
+    # ---Public methods--- #
 
     def get_hierarchy(self):
         return self.joint_hierarchy
@@ -102,7 +100,6 @@ class CpSourceMesh(object):
 
 class CpTargetMesh(object):
 
-
     def __init__(self, mesh):
         self.name = mesh
         self.mesh = mesh.getChildren()[0]
@@ -113,13 +110,13 @@ class CpTargetMesh(object):
         self.joint_hierarchy = None
         self.joint_positions = None
         self.locs_and_joints = None
-        #self.free_joints = None
+        # self.free_joints = None
         self.vertex_weights = None
 
+    # --- Private methods --- #
 
-    #---Private methods---#
-
-    def _connect_joints(self, child, parent):
+    @staticmethod
+    def _connect_joint(child, parent):
 
         pm.connectJoint(child, parent, pm=True)
 
@@ -155,7 +152,7 @@ class CpTargetMesh(object):
     def _create_skin_cluster(self):
         self.skin_cluster = pm.skinCluster(self.locs_and_joints.values(), self.mesh)
 
-    #---Public methods---#
+    # --- Public methods --- #
 
     def build_help_locators(self, source_joint_dict):
 
@@ -169,7 +166,7 @@ class CpTargetMesh(object):
             jnt_name = tPREFIX + name
             pm.select(None)
             jnt = pm.joint(n=jnt_name)
-            jnt.setRadius(0.1)
+            jnt.setRadius(0.2)
             jnt.setTranslation(loc.getTranslation('world'))
 
             self.locs_and_joints[loc] = jnt
@@ -197,7 +194,7 @@ class CpTargetMesh(object):
                 trgt_child_name = tPREFIX + src_child_name
                 trgt_parent_name = tPREFIX + src_parent_name
 
-                self._connect_joints(trgt_child_name, trgt_parent_name)
+                self._connect_joint(trgt_child_name, trgt_parent_name)
 
         self.joints_connected = True
 
@@ -310,7 +307,18 @@ class CpTargetMesh(object):
         else:
             pm.displayError('JSON file was empty')
 
-#---Public functions---#
+
+# -- Decorators -- #
+
+
+def cp_out_stamp(console):
+    def wrapper(*args):
+        return "[Cranium-Post]: <<< {0}".format(args[0])
+
+    return wrapper
+
+
+# --- Public functions --- #
 
 def copy_skin(source, target, same_topology=True):
     """
@@ -355,14 +363,27 @@ def import_vertex_weights(target):
     """
 '''
 
+
 def set_as_source():
 
-    #TODO - Bring selection into a safe namespace
-    #TODO - Is it worth book-keeping references to all loaded objects?
+    try:
+        source = pm.ls(selection=True)[0]
+    except IndexError:
+        raise AttributeError
+    else:
+        source = CpSourceMesh(source)  # May rise AttributeError
+        return source
 
-    source = pm.ls(selection=True)[0]
 
-    return str(source)
+def set_as_target():
+
+    try:
+        target = pm.ls(selection=True)[0]
+    except IndexError:
+        raise AttributeError
+    else:
+        target = CpTargetMesh(target)  # May rise AttributeError
+        return target
 
 
 def get_skin_cluster(mesh):
@@ -425,6 +446,13 @@ def save_file(file_name, **kwargs):
     return pm.saveFile(file_name, **kwargs)
 
 
+@cp_out_stamp
+def to_console(msg):
+    return msg
+
+
+
+
 # -- Utility functions Start --- #
 # JSON
 def write_json_file(dataToWrite, fileName):
@@ -456,7 +484,7 @@ def to_unicode(unicode_or_str):
         value = unicode_or_str.decode('utf-8')
     else:
         value = unicode_or_str
-    return value # Instance of unicode
+    return value  # Instance of unicode
 
 # Python 2
 def to_str(unicode_or_str):
@@ -464,7 +492,7 @@ def to_str(unicode_or_str):
         value = unicode_or_str.encode('utf-8')
     else:
         value = unicode_or_str
-    return value # Instance of str
+    return value  # Instance of str
 
 # -- Utility functions End --- #
 

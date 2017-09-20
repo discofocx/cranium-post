@@ -1,112 +1,104 @@
+# -*- coding: utf-8 -*-
+
 from __future__ import print_function
 
-import os
-import sys
-
-CpPath = 'E:\\dev\\python\\maya\\cranium_post'  # Change to network GIT
-
-if not CpPath in sys.path:
-    sys.path.append(CpPath)
-
-from cp_ops import cp_file_ops; reload(cp_file_ops)
-
-import PySide2.QtCore as qc
-import PySide2.QtGui as qg
-import PySide2.QtWidgets as qw
-
 # Info
-__author__   = 'Disco Hammer'
+__author__ = 'Disco Hammer'
 __copyright__ = 'Copyright 2017,  Dragon Unit Framestore LDN 2017'
 __version__ = '0.1'
 __email__ = 'gsorchin@framestore.com'
 __status__ = 'Prototype'
 
+import os
+import sys
+
+import PySide2.QtCore as qc
+import PySide2.QtGui as qg
+import PySide2.QtWidgets as qw
+
+try:
+    from cp_ops import cp_file_ops
+except ImportError as e:
+    CpPath = 'E:\\dev\\python\\maya\\cranium_post'  # Change to network GIT
+    sys.path.append(CpPath)
+    from cp_ops import cp_file_ops
+
+reload(cp_file_ops)
+
+
+# - Globals - #
 gDIALOG = None
 gPROMPT = None
 
+# ---------------------GUI----------------------------- #
 
-#---------------------GUI-----------------------------#
 
 class CpMainWindow(qw.QDialog):
-    def __init__(self): # -- Constructor
+    def __init__(self):  # -- Constructor
         super(CpMainWindow, self).__init__()
 
-        ## Main Window
+        # Attributes
+        self.source = None
+        self.target = None
 
-        self.setWindowTitle('Cranium Post')
+        # Main Window
+        self.setWindowTitle('Cranium Post 0.1')
         self.setWindowFlags(qc.Qt.WindowStaysOnTopHint)
         self.setModal(False)
-        #self.setFixedHeight(512)
+        # self.setFixedHeight(512)
         self.setFixedWidth(300)
-        #---Main Window Layout---
+
+        # --- Main Window Layout --- #
         self.setLayout(qw.QVBoxLayout())
-        self.layout().setContentsMargins(5,5,5,5)
+        self.layout().setContentsMargins(5, 5, 5, 5)
         self.layout().setSpacing(10)
         self.layout().setAlignment(qc.Qt.AlignTop)
 
-
-        #---SETUP Widget---
+        # --- SETUP Widget --- #
         setup_widget = qw.QWidget()
         setup_widget.setLayout(qw.QVBoxLayout())
-        setup_widget.layout().setContentsMargins(0,0,0,0)
+        setup_widget.layout().setContentsMargins(0, 0, 0, 0)
         setup_widget.layout().setSpacing(2)
-        setup_widget.setSizePolicy(qw.QSizePolicy.Minimum,
-                                   qw.QSizePolicy.Fixed)
+        setup_widget.setSizePolicy(qw.QSizePolicy.Minimum, qw.QSizePolicy.Fixed)
 
-        setup_splitter = Splitter("SET-UP", True,(253,95,0))
-        setup_widget.layout().addWidget(setup_splitter) ## Widget Splitter
+        setup_splitter = Splitter("SET-UP", True, (253, 95, 0))
+        setup_widget.layout().addWidget(setup_splitter)  # Widget Splitter
 
-        #---Active Fields Start---#
+        # --- Setup Fields Start ---#
 
         # Set as Source
-        set_source_layout = qw.QHBoxLayout()
-        set_source_layout.setContentsMargins(2, 0, 2, 0)
-        set_source_layout.setSpacing(4)
-        set_source_layout.setAlignment(qc.Qt.AlignRight)
-
-        setup_widget.layout().addLayout(set_source_layout)
-
-        set_source_lbl = qw.QLabel()
-        set_source_lbl.setText('Set as Source: ')
-
-        self.set_source_le = qw.QLineEdit()
-        self.set_source_le.setPlaceholderText('Select source...')
-        self.set_source_le.setMaximumWidth(162)
-        self.set_source_le.setEnabled(False)
-
-        set_source_txt = 'Set'
-        self.set_source_btn = qw.QPushButton()
-        self.set_source_btn.setText(set_source_txt)
-        self.set_source_btn.setMaximumWidth(self.set_source_btn.fontMetrics().boundingRect(set_source_txt).width() + 24)
-
-        set_source_layout.addWidget(set_source_lbl)
-        set_source_layout.addWidget(self.set_source_le)
-        set_source_layout.addWidget(self.set_source_btn)
+        self.set_source_layout = Picker('Set as Source: ', 'Select source...', 'Set')
+        setup_widget.layout().addLayout(self.set_source_layout)
 
         # Set as Target
-        set_target_layout = qw.QHBoxLayout()
-        set_target_layout.setContentsMargins(2, 0, 2, 0)
-        set_target_layout.setSpacing(4)
-        set_target_layout.setAlignment(qc.Qt.AlignRight)
+        self.set_target_layout = Picker('Set as Target: ', 'Select target...', 'Set')
+        setup_widget.layout().addLayout(self.set_target_layout)
 
-        setup_widget.layout().addLayout(set_target_layout)
+        # Splitter
+        setup_widget.layout().addLayout(SplitterLayout())
 
-        set_target_lbl = qw.QLabel()
-        set_target_lbl.setText('Set as Target: ')
+        # Build Help Locators
+        self.build_help_locators = ActionButton('Build Help Locators')
+        setup_widget.layout().addLayout(self.build_help_locators)
 
-        self.set_target_le = qw.QLineEdit()
-        self.set_target_le.setPlaceholderText('Select Target...')
-        self.set_target_le.setMaximumWidth(162)
-        self.set_target_le.setEnabled(False)
+        # Splitter
+        setup_widget.layout().addLayout(SplitterLayout())
 
-        set_target_txt = 'Set'
-        self.set_target_btn = qw.QPushButton()
-        self.set_target_btn.setText(set_target_txt)
-        self.set_target_btn.setMaximumWidth(self.set_target_btn.fontMetrics().boundingRect(set_target_txt).width() + 24)
+        # Update and connect joints
+        joints_layout = qw.QHBoxLayout()
+        self.update_joints = ActionButton('Update Joints')
+        self.connect_joints = ActionButton('Connect Joints')
 
-        set_target_layout.addWidget(set_target_lbl)
-        set_target_layout.addWidget(self.set_target_le)
-        set_target_layout.addWidget(self.set_target_btn)
+        joints_layout.addLayout(self.update_joints)
+        joints_layout.addLayout(self.connect_joints)
+
+        setup_widget.layout().addLayout(joints_layout)
+
+        # Splitter
+        setup_widget.layout().addLayout(SplitterLayout())
+
+        self.footer = Footer()
+        setup_widget.layout().addLayout(self.footer)
 
         '''
         project = FileOrFolderField('Project Folder', False)
@@ -144,10 +136,9 @@ class CpMainWindow(qw.QDialog):
         
         '''
 
-
         ## Add the setup widget to the main layout
 
-        self.layout().addWidget(setup_widget) ## Add widget to main layout
+        self.layout().addWidget(setup_widget)  ## Add widget to main layout
 
         '''
 
@@ -215,33 +206,56 @@ class CpMainWindow(qw.QDialog):
         
         '''
 
-        ### Connections
+        # - Connections - #
 
-        #Field Values
-        self.set_source_btn.clicked.connect(self._set_source_mesh)
+        # Fields
+        self.set_source_layout.btn.clicked.connect(self._set_source_mesh)
+        self.set_target_layout.btn.clicked.connect(self._set_target_mesh)
+        self.build_help_locators.btn.clicked.connect(self._build_help_locators)
+        self.update_joints.btn.clicked.connect(self._update_joints)
+        self.connect_joints.btn.clicked.connect(self._connect_joints)
 
-        '''
+    # - Instance Methods - #
 
-        #Run Button
-        project.fof_le.textChanged.connect(lambda: self._validate_values(gOBJDICT))
-        master.fof_le.textChanged.connect(lambda: self._validate_values(gOBJDICT))
-        batch.fof_le.textChanged.connect(lambda: self._validate_values(gOBJDICT))
-        output.fof_le.textChanged.connect(lambda: self._validate_values(gOBJDICT))
-
-        #Terminal Widget
-        self.clear_btn.clicked.connect(self._clearLog)
-        
-        
-
-    '''
-    ## Internal Definitions
-
-    #-------------------------------------------------#
+    # -------------------------------------------------#
 
     def _set_source_mesh(self):
+        try:
+            self.source = cp_file_ops.set_as_source()
+        except AttributeError:
+            print(cp_file_ops.to_console('Please select a valid source skinned mesh'))
+            # print('[Cranium-Post]: Please select a valid source skinned mesh')
+        else:
+            self.set_source_layout.line_edit.setPlaceholderText(str(self.source.name))
+            self._check_requirements()
 
-        source = cp_file_ops.set_as_source()
-        self.set_source_le.setPlaceholderText(source)
+    def _set_target_mesh(self):
+        try:
+            self.target = cp_file_ops.set_as_target()
+        except AttributeError:
+            print(cp_file_ops.to_console('Please select a valid target mesh'))
+            # print('[Cranium-Post]: Please select a valid target mesh')
+        else:
+            self.set_target_layout.line_edit.setPlaceholderText(str(self.target.name))
+            self._check_requirements()
+
+    def _check_requirements(self):
+        if self.target and self.source:
+            self.build_help_locators.btn.setEnabled(True)
+
+        if self.target.locs_and_joints:
+            self.update_joints.btn.setEnabled(True)
+            self.connect_joints.btn.setEnabled(True)
+
+    def _build_help_locators(self):
+        self.target.build_help_locators(self.source.joint_positions)
+        self._check_requirements()
+
+    def _update_joints(self):
+        self.target.update_joints()
+
+    def _connect_joints(self):
+        self.target.connect_joints(self.source.joint_hierarchy)
 
     '''
     def _updateTerminal(self, string):
@@ -307,76 +321,6 @@ class CpMainWindow(qw.QDialog):
 
 #-----------------------------------------------------#
 
-class FileOrFolderField(qw.QHBoxLayout):
-    def __init__(self, title = None, file_or_folder = True):
-        super(FileOrFolderField, self).__init__()
-
-        ## Folder
-        self.setContentsMargins(4,0,4,0)
-        self.setSpacing(2)
-        #parent.layout().addLayout(self.fof_layout)
-
-        self.fof_lbl = qw.QLabel()
-        self.fof_lbl.setText(title)
-        self.fof_le = qw.QLineEdit()
-
-        self.fof_le.setPlaceholderText('Path...')
-        self.fof_le.setEnabled(False)
-        self.fof_le.setMaximumWidth(242)
-
-        self.fof_btn = qw.QPushButton()
-        self.fof_btn.setText('Set')
-        ktext = self.fof_btn.text()
-        kwidth = self.fof_btn.fontMetrics().boundingRect(ktext).width() + 32
-        self.fof_btn.setMaximumWidth(kwidth)
-        self.fof_btn.setEnabled(True)
-
-        self.layout().addWidget(self.fof_lbl)
-        self.layout().addWidget(self.fof_le)
-        self.layout().addWidget(self.fof_btn)
-
-        ## Connections
-
-        self.fof_btn.clicked.connect(lambda:self._getPath(title,file_or_folder))
-
-        ## Internal Defs
-
-    def _getPath(self, title, action):
-
-        pPath = None
-
-        if action:
-
-            pPath, terminal = None, None#ikb_ops.get_file(title)
-
-            if os.path.isfile(pPath) and pPath.endswith('.fbx'):
-
-                self.fof_le.setText(pPath)
-                gDIALOG._updateTerminal(terminal)
-
-            else:
-
-                print ('Selected file is not valid')
-                gDIALOG._updateTerminal(terminal)
-
-        else:
-
-            pPath, terminal = None, None#ikb_ops.get_directory(title)
-
-            if os.path.isdir(pPath):
-
-                self.fof_le.setText(pPath)
-                gDIALOG._updateTerminal(terminal)
-
-            else:
-
-                print ('Selected path is not valid')
-                gDIALOG._updateTerminal(terminal)
-
-    def _return_field_value(self):
-
-        return self.fof_le.text()
-
 #-----------------------------------------------------#
 
 class promptToUser(qg.QMessageBox):
@@ -389,15 +333,85 @@ class promptToUser(qg.QMessageBox):
         self.setStandardButtons(qg.QMessageBox.Ok | qg.QMessageBox.Cancel)
 '''
 
-#-----------------------------------------------------#
+
+# ----------------------------------------------------- #
+
+
+class Picker(qw.QHBoxLayout):
+
+    def __init__(self, label, line, btn):
+        """
+        :param label: Str
+        :param line: Str
+        :param btn: Str
+        """
+        super(Picker, self).__init__()
+        self.setContentsMargins(2, 0, 2, 0)
+        self.setSpacing(4)
+        self.setAlignment(qc.Qt.AlignRight)
+
+        self.lbl = qw.QLabel()
+        self.lbl.setText(label)
+
+        self.line_edit = qw.QLineEdit()
+        self.line_edit.setPlaceholderText(line)
+        self.line_edit.setMaximumWidth(162)
+        self.line_edit.setEnabled(False)
+
+        self.btn = qw.QPushButton()
+        self.btn.setText(btn)
+        self.btn.setMaximumWidth(self.btn.fontMetrics().boundingRect(btn).width() + 24)
+
+        self.addWidget(self.lbl)
+        self.addWidget(self.line_edit)
+        self.addWidget(self.btn)
+
+        # - Connections - #
+
+    '''  # Replaced by instance methods on the GUI Class
+    def _pick(self):
+        global gSOURCE  # TODO Not entirely in love with using globals for this
+        global gTARGET
+
+        if self.source:  # We check if the picked object should be set as source or target
+            try:
+                gSOURCE = cp_file_ops.set_as_source()
+                self.line_edit.setPlaceholderText(str(gSOURCE.name))
+            except AttributeError:
+                print('[Cranium-Post]: Please select a valid source skinned mesh')
+
+        else:
+            gTARGET = cp_file_ops.set_as_target()
+            self.line_edit.setPlaceholderText(str(gTARGET.name))
+    '''
+
+
+# ----------------------------------------------------- #
+
+
+class ActionButton(qw.QHBoxLayout):
+    def __init__(self, label):
+        super(ActionButton, self).__init__()
+
+        self.setContentsMargins(4, 0, 4, 0)
+        self.setSpacing(2)
+
+        self.btn = qw.QPushButton(label)
+        self.btn.setEnabled(False)
+
+        self.layout().addWidget(self.btn)
+
+
+# ----------------------------------------------------- #
+
 
 class Splitter(qw.QWidget):
-    def __init__(self, text = None, shadow = True, color = (150,150,150)):
+    def __init__(self, text=None, shadow=True, color=(150, 150, 150)):
         super(Splitter, self).__init__()
 
         self.setMinimumHeight(2)
         self.setLayout(qw.QHBoxLayout())
-        self.layout().setContentsMargins(0,0,0,0)
+        self.layout().setContentsMargins(0, 0, 0, 0)
         self.layout().setSpacing(0)
         self.layout().setAlignment(qc.Qt.AlignVCenter)
 
@@ -405,18 +419,18 @@ class Splitter(qw.QWidget):
         first_line.setFrameStyle(qw.QFrame.HLine)
         self.layout().addWidget(first_line)
 
-        main_color   = 'rgba(%s, %s, %s, 255)' %color
+        main_color = 'rgba(%s, %s, %s, 255)' % color
         shadow_color = 'rgba(45, 45, 45, 255)'
 
         bottom_border = ''
 
         if shadow:
-            bottom_border = 'border-bottom:2px solid %s' %shadow_color
+            bottom_border = 'border-bottom:2px solid %s' % shadow_color
 
         style_sheet = "border:0px solid rgba(0,0,0,0); \
                        background-color: %s; \
                        max-height:2px; \
-                       %s" %(main_color, bottom_border)
+                       %s" % (main_color, bottom_border)
 
         first_line.setStyleSheet(style_sheet)
 
@@ -430,7 +444,7 @@ class Splitter(qw.QWidget):
         font.setItalic(True)
 
         text_width = qg.QFontMetrics(font)
-        #text_width.inFont(font)
+        # text_width.inFont(font)
         width = text_width.width(text) + 16
 
         label = qw.QLabel()
@@ -447,28 +461,46 @@ class Splitter(qw.QWidget):
 
         second_line.setStyleSheet(style_sheet)
 
-#-----------------------------------------------------#
+
+# ----------------------------------------------------- #
+
 
 class SplitterLayout(qw.QHBoxLayout):
     def __init__(self):
         super(SplitterLayout, self).__init__()
 
-        self.setContentsMargins(40,2,40,2)
+        self.setContentsMargins(40, 2, 40, 2)
 
-        layout_line = Splitter(shadow = False, color = (60,60,60))
+        layout_line = Splitter(shadow=False, color=(60, 60, 60))
         layout_line.setFixedHeight(1)
 
         self.addWidget(layout_line)
 
-#-----------------------------------------------------#
 
-#General Definitions
+# ----------------------------------------------------- #
+
+class Footer(qw.QHBoxLayout):
+    def __init__(self):
+        super(Footer, self).__init__()
+        self.setContentsMargins(2, 0, 2, 0)
+        self.setSpacing(4)
+        self.setAlignment(qc.Qt.AlignRight)
+
+        self.lbl = qw.QLabel()
+        self.lbl.setText('© 2017 Framestore Capturelab, __discofocx__')
+        self.addWidget(self.lbl)
+
+# ----------------------------------------------------- #
+
+# General Definitions
+
 
 def create():
     global gDIALOG
     if gDIALOG is None:
         gDIALOG = CpMainWindow()
     gDIALOG.show()
+
 
 def delete():
     global gDIALOG
@@ -477,5 +509,3 @@ def delete():
 
     gDIALOG.deleteLater()
     gDIALOG = None
-
-create()
