@@ -9,12 +9,15 @@ __version__ = '0.1'
 __email__ = 'gsorchin@framestore.com'
 __status__ = 'Prototype'
 
-import os
 import sys
 
 import PySide2.QtCore as qc
 import PySide2.QtGui as qg
 import PySide2.QtWidgets as qw
+import shiboken2
+import maya.cmds as mc
+import maya.OpenMayaUI as mui
+from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
 try:
     from cp_ops import cp_file_ops
@@ -25,191 +28,160 @@ except ImportError as e:
 
 reload(cp_file_ops)
 
-
 # - Globals - #
 gDIALOG = None
 gPROMPT = None
+gDEBUG = False
 
 # ---------------------GUI----------------------------- #
 
 
-class CpMainWindow(qw.QDialog):
+class CraniumPostWindow(MayaQWidgetDockableMixin, qw.QDialog):
+    def __init__(self):
+        super(CraniumPostWindow, self).__init__()
+        self.setWindowFlags(qc.Qt.WindowStaysOnTopHint)
+        self.setWindowTitle('Cranium Post 0.1')
+        self.setMinimumWidth(300)
+        self.setMinimumHeight(380)
+
+        # Attributes
+        self._dock_widget = None
+        self._dock_name = None
+
+        # --- Main Window Layout --- #
+        self.setLayout(qw.QVBoxLayout())
+        self.layout().setContentsMargins(0, 0, 0, 0)
+        self.layout().setSpacing(8)
+
+        scroll_area = qw.QScrollArea()
+        scroll_area.setFrameStyle(qw.QFrame.Plain | qw.QFrame.NoFrame)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFocusPolicy(qc.Qt.NoFocus)
+        scroll_area.setHorizontalScrollBarPolicy(qc.Qt.ScrollBarAlwaysOff)
+        self.layout().addWidget(scroll_area)
+
+        main_widget = qw.QWidget()
+        main_layout = qw.QVBoxLayout()
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setAlignment(qc.Qt.AlignTop)
+        main_widget.setLayout(main_layout)
+        scroll_area.setWidget(main_widget)
+
+        new_widget = CraniumPostWidget()
+        main_layout.addWidget(new_widget)
+
+        # Footer
+        footer_widget = Footer()
+        self.layout().addWidget(footer_widget)
+
+    def connect_dock_widget(self, dock_name, dock_widget):  # Unused because using MayaMixin
+        self._dock_widget = dock_widget
+        self._dock_name = dock_name
+
+    '''    
+    # def close(self):
+    #     if self._dock_widget:
+    #         mc.deleteUI(self._dock_name)
+    #     else:
+    #         self.qw.QDialog.close()
+    #
+    #     self._dock_name = None
+    #     self._dock_widget = None
+    '''
+
+
+class CraniumPostWidget(qw.QFrame):
     def __init__(self):  # -- Constructor
-        super(CpMainWindow, self).__init__()
+        super(CraniumPostWidget, self).__init__()
+        # self.setFrameStyle(qw.QFrame.Panel | qw.QFrame.Raised)
+        self.setLayout(qw.QVBoxLayout())
 
         # Attributes
         self.source = None
         self.target = None
 
-        # Main Window
-        self.setWindowTitle('Cranium Post 0.1')
-        self.setWindowFlags(qc.Qt.WindowStaysOnTopHint)
-        self.setModal(False)
-        # self.setFixedHeight(512)
-        self.setFixedWidth(300)
-
-        # --- Main Window Layout --- #
-        self.setLayout(qw.QVBoxLayout())
-        self.layout().setContentsMargins(5, 5, 5, 5)
-        self.layout().setSpacing(10)
-        self.layout().setAlignment(qc.Qt.AlignTop)
-
         # --- SETUP Widget --- #
         setup_widget = qw.QWidget()
         setup_widget.setLayout(qw.QVBoxLayout())
         setup_widget.layout().setContentsMargins(0, 0, 0, 0)
-        setup_widget.layout().setSpacing(2)
+        setup_widget.layout().setSpacing(4)
         setup_widget.setSizePolicy(qw.QSizePolicy.Minimum, qw.QSizePolicy.Fixed)
 
+        # Head Splitter
         setup_splitter = Splitter("SET-UP", True, (253, 95, 0))
         setup_widget.layout().addWidget(setup_splitter)  # Widget Splitter
 
         # --- Setup Fields Start ---#
 
         # Set as Source
-        self.set_source_layout = Picker('Set as Source: ', 'Select source...', 'Set')
+        self.set_source_layout = Picker('Set as Source:', 'Select source...', 'Set')
         setup_widget.layout().addLayout(self.set_source_layout)
+
+        # Source Actions
+        source_actions = qw.QHBoxLayout()
+        source_actions.setSpacing(2)
+        setup_widget.layout().addLayout(source_actions)
+
+        self.cache_skin_weights = ActionButton('Cache Skin Weights')
+        self.export_skin_weights = ActionButton('Export Skin Weights')
+
+        source_actions.addSpacing(12)
+        source_actions.addLayout(self.cache_skin_weights)
+        source_actions.addLayout(self.export_skin_weights)
+        source_actions.addSpacing(12)
+
+        # Splitter
+        setup_widget.layout().addLayout(SplitterLayout())
 
         # Set as Target
         self.set_target_layout = Picker('Set as Target: ', 'Select target...', 'Set')
         setup_widget.layout().addLayout(self.set_target_layout)
 
-        # Splitter
-        setup_widget.layout().addLayout(SplitterLayout())
-
         # Build Help Locators
-        self.build_help_locators = ActionButton('Build Help Locators')
-        setup_widget.layout().addLayout(self.build_help_locators)
 
-        # Splitter
-        setup_widget.layout().addLayout(SplitterLayout())
+        build_layout = qw.QHBoxLayout()
+        build_layout.setSpacing(2)
+        setup_widget.layout().addLayout(build_layout)
+
+        self.build_help_locators = ActionButton('Build Help Locators')
+
+        build_layout.addSpacing(12)
+        build_layout.addLayout(self.build_help_locators)
+        build_layout.addSpacing(12)
 
         # Update and connect joints
         joints_layout = qw.QHBoxLayout()
+        joints_layout.setSpacing(2)
         self.update_joints = ActionButton('Update Joints')
         self.connect_joints = ActionButton('Connect Joints')
 
+        joints_layout.addSpacing(12)
         joints_layout.addLayout(self.update_joints)
         joints_layout.addLayout(self.connect_joints)
+        joints_layout.addSpacing(12)
 
         setup_widget.layout().addLayout(joints_layout)
 
         # Splitter
         setup_widget.layout().addLayout(SplitterLayout())
 
-        self.footer = Footer()
-        setup_widget.layout().addLayout(self.footer)
+        # Add the setup widget to the main layout
+        self.layout().addWidget(setup_widget)
 
-        '''
-        project = FileOrFolderField('Project Folder', False)
-        setup_widget.layout().addLayout(project)
-        setup_widget.layout().addLayout(SplitterLayout()) ## Section Splitter
-        gOBJDICT[PRJ] = project
+        # Log Splitter
+        log_splitter = Splitter("LOG", True, (253, 95, 0))
+        setup_widget.layout().addWidget(log_splitter)  # Widget Splitter
 
-        master = FileOrFolderField('Master Scene', True)
-        setup_widget.layout().addLayout(master)
-        setup_widget.layout().addLayout(SplitterLayout()) ## Section Splitter
-        gOBJDICT[MST] = master
-
-        batch = FileOrFolderField('Batch Folder', False)
-        setup_widget.layout().addLayout(batch)
-        setup_widget.layout().addLayout(SplitterLayout()) ## Section Splitter
-        gOBJDICT[BTC] = batch
-
-        output = FileOrFolderField('Output Folder', False)
-        setup_widget.layout().addLayout(output)
-        setup_widget.layout().addLayout(SplitterLayout()) ## Section Splitter
-        gOBJDICT[OUT] = output
-
-        ## Run Button
-
-        run_btn_layout = qg.QHBoxLayout()
-        run_btn_layout.setContentsMargins(4,0,4,0)
-        run_btn_layout.setSpacing(2)
-        setup_widget.layout().addLayout(run_btn_layout)
-
-        self.run_btn = qg.QPushButton('Run')
-        self.run_btn.setEnabled(False)
-
-        run_btn_layout.layout().addWidget(self.run_btn)
-        setup_widget.layout().addLayout(SplitterLayout())
-        
-        '''
-
-        ## Add the setup widget to the main layout
-
-        self.layout().addWidget(setup_widget)  ## Add widget to main layout
-
-        '''
-
-        #MONITOR - Widget
-        monitor_widget = qg.QWidget()
-        monitor_widget.setLayout(qg.QVBoxLayout())
-        monitor_widget.layout().setContentsMargins(0,0,0,0)
-        monitor_widget.layout().setSpacing(2)
-        monitor_widget.setSizePolicy(qg.QSizePolicy.Minimum,
-                                     qg.QSizePolicy.Fixed)
-
-        self.layout().addWidget(monitor_widget)
-
-        #MONITOR Layout
-        monitor_layout = qg.QHBoxLayout()
-        monitor_layout.setContentsMargins(4,0,4,0)
-        monitor_layout.setSpacing(2)
-
-
-        monitor_widget.layout().addLayout(monitor_layout)
-
-        self.monitor_multiline = qg.QTextEdit('<< Terminal')
-        self.monitor_multiline.setMaximumHeight(100)
-        self.monitor_multiline.setDisabled(True)
-
-        monitor_layout.layout().addWidget(self.monitor_multiline)
-
-        #CLEAR Layout
-        clear_layout = qg.QHBoxLayout()
-        clear_layout.setContentsMargins(4,0,4,0)
-        clear_layout.setSpacing(2)
-        clear_layout.setAlignment(qc.Qt.AlignRight)
-
-        monitor_widget.layout().addLayout(clear_layout)
-
-        self.clear_btn = qg.QPushButton('Clear')
-        self.clear_btn.setFixedWidth(50)
-
-        clear_layout.layout().addWidget(self.clear_btn)
-
-        #COPYRIGHT-Widget
-        copyRight_widget = qg.QWidget()
-        copyRight_widget.setLayout(qg.QVBoxLayout())
-        copyRight_widget.layout().setContentsMargins(0,0,0,0)
-        copyRight_widget.layout().setSpacing(2)
-        copyRight_widget.layout().setAlignment(qc.Qt.AlignBottom)
-        copyRight_widget.setSizePolicy(qg.QSizePolicy.Minimum,
-                                       qg.QSizePolicy.Fixed)
-
-        self.layout().addWidget(copyRight_widget)
-
-        #Copyright Layout
-        copyRight_layout = qg.QHBoxLayout()
-        copyRight_layout.setContentsMargins(4,0,4,0)
-        copyRight_layout.setSpacing(2)
-        copyRight_widget.layout().addLayout(copyRight_layout)
-
-        copy = u"\u00a9"
-        lbl_text = copy + " Dragon Unit - Framestore LDN 2017"
-        copyRight_lbl = qg.QLabel()
-        copyRight_lbl.setText(lbl_text)
-        copyRight_lbl.setAlignment(qc.Qt.AlignRight)
-
-        copyRight_layout.layout().addWidget(copyRight_lbl)
-        
-        '''
+        # MONITOR - Widget
+        self.monitor = Monitor()
+        self.layout().addWidget(self.monitor)
 
         # - Connections - #
 
         # Fields
         self.set_source_layout.btn.clicked.connect(self._set_source_mesh)
+        self.cache_skin_weights.btn.clicked.connect(self._cache_skin_weights)
+        # self.export_skin_weights.btn.clicked.connect(self.export_skin_weights)
         self.set_target_layout.btn.clicked.connect(self._set_target_mesh)
         self.build_help_locators.btn.clicked.connect(self._build_help_locators)
         self.update_joints.btn.clicked.connect(self._update_joints)
@@ -217,7 +189,29 @@ class CpMainWindow(qw.QDialog):
 
     # - Instance Methods - #
 
-    # -------------------------------------------------#
+    # ------------------------------------------------- #
+
+    def _check_gui_requirements(self):
+        if self.source:
+            self.cache_skin_weights.btn.setEnabled(True)
+            self.export_skin_weights.btn.setEnabled(True)
+        else:
+            self.cache_skin_weights.btn.setEnabled(False)
+            self.export_skin_weights.btn.setEnabled(False)
+
+        if self.target and self.source:
+            self.build_help_locators.btn.setEnabled(True)
+
+            if self.target.locs_and_joints:
+                self.update_joints.btn.setEnabled(True)
+                self.connect_joints.btn.setEnabled(True)
+            else:
+                self.update_joints.btn.setEnabled(False)
+                self.connect_joints.btn.setEnabled(False)
+        else:
+            self.build_help_locators.btn.setEnabled(False)
+
+    # ------------------------------------------------- #
 
     def _set_source_mesh(self):
         try:
@@ -227,7 +221,16 @@ class CpMainWindow(qw.QDialog):
             # print('[Cranium-Post]: Please select a valid source skinned mesh')
         else:
             self.set_source_layout.line_edit.setPlaceholderText(str(self.source.name))
-            self._check_requirements()
+            self._check_gui_requirements()
+
+    def _cache_skin_weights(self):
+        try:
+            self.source.build_weights_association()
+        except Exception as ce:
+            print(ce)
+        else:
+            print(self.source.vertex_weights)
+            self.monitor.update_monitor(cp_file_ops.to_console('Cached skin weights'))
 
     def _set_target_mesh(self):
         try:
@@ -237,25 +240,21 @@ class CpMainWindow(qw.QDialog):
             # print('[Cranium-Post]: Please select a valid target mesh')
         else:
             self.set_target_layout.line_edit.setPlaceholderText(str(self.target.name))
-            self._check_requirements()
-
-    def _check_requirements(self):
-        if self.target and self.source:
-            self.build_help_locators.btn.setEnabled(True)
-
-        if self.target.locs_and_joints:
-            self.update_joints.btn.setEnabled(True)
-            self.connect_joints.btn.setEnabled(True)
+            self._check_gui_requirements()
 
     def _build_help_locators(self):
         self.target.build_help_locators(self.source.joint_positions)
-        self._check_requirements()
+        self._check_gui_requirements()
 
     def _update_joints(self):
         self.target.update_joints()
 
     def _connect_joints(self):
         self.target.connect_joints(self.source.joint_hierarchy)
+
+    def _clear_fields(self):
+        self.source = None
+        self.target = None
 
     '''
     def _updateTerminal(self, string):
@@ -338,7 +337,6 @@ class promptToUser(qg.QMessageBox):
 
 
 class Picker(qw.QHBoxLayout):
-
     def __init__(self, label, line, btn):
         """
         :param label: Str
@@ -347,15 +345,15 @@ class Picker(qw.QHBoxLayout):
         """
         super(Picker, self).__init__()
         self.setContentsMargins(2, 0, 2, 0)
-        self.setSpacing(4)
-        self.setAlignment(qc.Qt.AlignRight)
+        self.setSpacing(6)
+        self.setAlignment(qc.Qt.AlignCenter)
 
         self.lbl = qw.QLabel()
         self.lbl.setText(label)
 
         self.line_edit = qw.QLineEdit()
         self.line_edit.setPlaceholderText(line)
-        self.line_edit.setMaximumWidth(162)
+        # self.line_edit.setMaximumWidth(144)
         self.line_edit.setEnabled(False)
 
         self.btn = qw.QPushButton()
@@ -393,7 +391,7 @@ class ActionButton(qw.QHBoxLayout):
     def __init__(self, label):
         super(ActionButton, self).__init__()
 
-        self.setContentsMargins(4, 0, 4, 0)
+        self.setContentsMargins(2, 1, 2, 1)
         self.setSpacing(2)
 
         self.btn = qw.QPushButton(label)
@@ -415,9 +413,9 @@ class Splitter(qw.QWidget):
         self.layout().setSpacing(0)
         self.layout().setAlignment(qc.Qt.AlignVCenter)
 
-        first_line = qw.QFrame()
-        first_line.setFrameStyle(qw.QFrame.HLine)
-        self.layout().addWidget(first_line)
+        self.first_line = qw.QFrame()
+        self.first_line.setFrameStyle(qw.QFrame.HLine)
+        self.layout().addWidget(self.first_line)
 
         main_color = 'rgba(%s, %s, %s, 255)' % color
         shadow_color = 'rgba(45, 45, 45, 255)'
@@ -432,12 +430,12 @@ class Splitter(qw.QWidget):
                        max-height:2px; \
                        %s" % (main_color, bottom_border)
 
-        first_line.setStyleSheet(style_sheet)
+        self.first_line.setStyleSheet(style_sheet)
 
         if text is None:
             return
 
-        first_line.setMaximumWidth(5)
+        self.first_line.setMaximumWidth(5)
 
         font = qg.QFont()
         font.setBold(True)
@@ -479,27 +477,117 @@ class SplitterLayout(qw.QHBoxLayout):
 
 # ----------------------------------------------------- #
 
-class Footer(qw.QHBoxLayout):
+class Monitor(qw.QWidget):
+    def __init__(self):
+        super(Monitor, self).__init__()
+        self.setSizePolicy(qw.QSizePolicy.Minimum,
+                           qw.QSizePolicy.Fixed)
+        self.setLayout(qw.QVBoxLayout())
+        self.layout().setContentsMargins(2, 0, 2, 0)
+        self.layout().setSpacing(4)
+
+        self.monitor_multi_line = qw.QTextEdit()
+        self.monitor_multi_line.setMaximumHeight(100)
+        self.monitor_multi_line.setDisabled(True)
+        self._startup_monitor()
+
+        clear_layout = qw.QHBoxLayout()
+        clear_layout.setContentsMargins(0, 0, 1, 0)
+        clear_layout.setAlignment(qc.Qt.AlignRight)
+
+        self.clear_btn = qw.QPushButton()
+        self.clear_btn.setText('Clear')
+        self.clear_btn.setMaximumWidth(self.clear_btn.fontMetrics().boundingRect(self.clear_btn.text()).width() + 12)
+
+        clear_layout.addWidget(self.clear_btn)
+
+        self.layout().addWidget(self.monitor_multi_line)
+        self.layout().addLayout(clear_layout)
+
+        # - Connections - #
+        self.clear_btn.clicked.connect(self._clear_monitor)
+
+    def _startup_monitor(self):
+        self.monitor_multi_line.setText(cp_file_ops.to_console('Monitor'))
+
+    def update_monitor(self, message):
+        self.monitor_multi_line.append(message)
+
+    def _clear_monitor(self):
+        self.monitor_multi_line.clear()
+        self._startup_monitor()
+
+
+# ----------------------------------------------------- #
+
+class Footer(qw.QWidget):
     def __init__(self):
         super(Footer, self).__init__()
-        self.setContentsMargins(2, 0, 2, 0)
-        self.setSpacing(4)
-        self.setAlignment(qc.Qt.AlignRight)
+        self.setLayout(qw.QVBoxLayout())
+        self.layout().setContentsMargins(4, 4, 16, 4)
+        self.layout().setSpacing(2)
+        self.layout().setAlignment(qc.Qt.AlignRight)
+        self.setSizePolicy(qw.QSizePolicy.Minimum,
+                           qw.QSizePolicy.Fixed)
 
         self.lbl = qw.QLabel()
-        self.lbl.setText('© 2017 Framestore Capturelab, __discofocx__')
-        self.addWidget(self.lbl)
+        self.lbl.setText('© 2017 Dragon Unit - Framestore LDN')
+        self.layout().addWidget(self.lbl)
+
+
+class SFooter(Splitter):
+    def __init__(self, *args, **kwargs):
+        super(SFooter, self).__init__(*args, **kwargs)
+
+        self.first_line.setMaximumWidth(50)
+
 
 # ----------------------------------------------------- #
 
 # General Definitions
 
-
-def create():
+def create(docked=True):
     global gDIALOG
+    print(gDIALOG)
     if gDIALOG is None:
-        gDIALOG = CpMainWindow()
-    gDIALOG.show()
+        gDIALOG = CraniumPostWindow()
+        print(gDIALOG)
+
+    print(gDIALOG)
+    if docked is True:
+        gDIALOG.show(dockable=True,
+                     area='right',
+                     allowedArea=['right', 'left'])
+
+        '''
+        # ptr = mui.MQtUtil.mainWindow()
+        # main_window = shiboken2.wrapInstance(long(ptr), qw.QWidget)
+        #
+        # gDIALOG.setParent(main_window)
+        # size = gDIALOG.size()
+        #
+        # print(shiboken2.getCppPointer(gDIALOG))
+        #
+        # name = mui.MQtUtil.fullName(long(shiboken2.getCppPointer(gDIALOG)[0]))
+        # name = 'MayaWindow'
+        # print('name' + name)
+        # dock = mc.dockControl(
+        #     allowedArea=['right', 'left'],
+        #     area='right',
+        #     content=name,
+        #     floating=False,
+        #     width=size.width(),
+        #     height=size.height(),
+        #     label='Cranium Post 0.1'
+        # )
+        #
+        # # widget = mui.MQtUtil.findControl(dock)
+        # # dock_widget = shiboken2.wrapInstance(long(widget), qw.QWidget)
+        # # gDIALOG.connectDockWidget(dock, dock_widget)
+        '''
+    else:
+        gDIALOG.show(dockable=False,
+                     floating=True)
 
 
 def delete():

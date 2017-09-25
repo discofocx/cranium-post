@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 
-import os
-import json
-
-import pymel.core as pm
-
 # Info
 __author__ = 'Disco Hammer'
 __copyright__ = 'Copyright 2017,  Dragon Unit Framestore LDN 2017'
 __version__ = '0.1'
 __email__ = 'gsorchin@framestore.com'
 __status__ = 'Prototype'
+
+import os
+import json
+
+import pymel.core as pm
 
 # - Globals - #
 tPREFIX = 'target_'
@@ -26,7 +26,7 @@ class CpSourceMesh(object):
         self.skin_cluster = self._get_skin_cluster()
         self.root_joint = self._get_root_joint()
         self.joint_hierarchy, self.joint_positions = self._get_joint_hierarchy(self.root_joint)
-        self.loc_helpers = None
+        self.loc_helpers = None  # Attribute is never used
         self.vertex_weights = None
 
     # ---Private methods--- #
@@ -39,7 +39,8 @@ class CpSourceMesh(object):
     def _get_root_joint(self):
         return self.skin_cluster.getInfluence()[0]
 
-    def _get_joint_hierarchy(self, root_joint):
+    @staticmethod
+    def _get_joint_hierarchy(root_joint):
 
         hierarchy = dict()
         positions = dict()
@@ -65,7 +66,6 @@ class CpSourceMesh(object):
         Handy for saving out skin weights or transferring them to a different mesh with the same topology.
 
         :return weights_association:
-        :type weights_association: dict
         """
         self.vertex_weights = dict()
         threshold = 0.001
@@ -84,18 +84,13 @@ class CpSourceMesh(object):
     def export_vertex_weights(self):
         """
         Export the weight association to a json file for future use.
-        :param source: The source skinned mesh
-        :type source: CpSourceMesh
-        :param filename: The desired name for the resulting json file
-        :type filename: str
-        :return res: str
         """
         if self.vertex_weights is not None:
-           filename = pm.fileDialog2(fm=0)[0]
-           res = write_json_file(self.vertex_weights, filename)
-           return res
+            filename = pm.fileDialog2(fm=0)[0]
+            res = write_json_file(self.vertex_weights, filename)
+            return res
         else:
-           return 'No pre-processed weights to export'
+            return to_console('No pre-processed weights to export')
 
 
 class CpTargetMesh(object):
@@ -120,12 +115,16 @@ class CpTargetMesh(object):
 
         pm.connectJoint(child, parent, pm=True)
 
-    def _disconnect_joint(self, jnt):
+    @staticmethod
+    def _disconnect_joint(jnt):
+        print(jnt)
+        try:
+            pm.parent(jnt, w=True)
+        except RuntimeError:
+            pass
 
-        pm.disconnectJoint(jnt)
-
-    def _get_joint_name(self, jnt):
-
+    @staticmethod
+    def _get_joint_name(jnt):
         try:
             jnt_name = jnt.name()
         except AttributeError:
@@ -133,7 +132,8 @@ class CpTargetMesh(object):
 
         return jnt_name
 
-    def _group_contents(self, grp_name, contents):
+    @staticmethod
+    def _group_contents(grp_name, contents):
 
         pm.select(None)
 
@@ -185,7 +185,7 @@ class CpTargetMesh(object):
 
         for child in mapping.keys():
             parent = mapping[child]
-            if parent == None:
+            if parent is None:
                 pass
             else:
                 src_child_name = self._get_joint_name(child)
@@ -222,7 +222,7 @@ class CpTargetMesh(object):
 
     def disconnect_joints(self):
 
-        for joint in self.locs_and_joints.values():
+        for joint in reversed(self.locs_and_joints.values()):
             self._disconnect_joint(joint)
 
         self.joints_connected = False
@@ -230,22 +230,17 @@ class CpTargetMesh(object):
     def import_vertex_weights(self):
         """
         Import skin weights previously saved out as json
-        :param target: The target mesh
-        :type target: CpTargetMesh
-        :return: bool True if import succeeded
         """
 
-
-        if self.skin_cluster == None:
+        if self.skin_cluster is None:
             self._create_skin_cluster()
 
-        file = pm.fileDialog2(fm=1)[0]
+        kfile = pm.fileDialog2(fm=1)[0]
 
-        vertex_data = readJsonFile(file)
+        vertex_data = read_json_file(kfile)
 
         for key in sorted(vertex_data.keys()):
             target_key = key.replace('src_', 'target_')
-
 
         for keys, values in sorted(vertex_data.iteritems()):
             new_values = list()
@@ -274,7 +269,7 @@ class CpTargetMesh(object):
                 try:
                     pm.skinPercent(self.skin_cluster, key, tv=self.vertex_weights[key], zri=1)
                 except Exception as e:
-                    pm.displayError(e)
+                    print(to_console(e))
 
             '''
             for keys, values in self.vertex_weights.iteritems():
@@ -305,7 +300,8 @@ class CpTargetMesh(object):
             '''
 
         else:
-            pm.displayError('JSON file was empty')
+            # pm.displayError('JSON file was empty')
+            print(to_console('JSON file was empty'))
 
 
 # -- Decorators -- #
@@ -313,7 +309,7 @@ class CpTargetMesh(object):
 
 def cp_out_stamp(console):
     def wrapper(*args):
-        return "[Cranium-Post]: <<< {0}".format(args[0])
+        return "[Cranium-Post]: << {0}".format(args[0])
 
     return wrapper
 
@@ -451,33 +447,33 @@ def to_console(msg):
     return msg
 
 
-
-
 # -- Utility functions Start --- #
 # JSON
-def write_json_file(dataToWrite, fileName):
-    if '.json' not in fileName:
-        fileName += '.json'
+def write_json_file(data_to_write, file_name):
+    if '.json' not in file_name:
+        file_name += '.json'
 
-    with open(fileName, "w") as json_file:
+    with open(file_name, "w") as json_file:
         try:
-            json.dump(dataToWrite, json_file, indent=2)
+            json.dump(data_to_write, json_file, indent=2)
         except Exception as e:
             return e
         else:
-            return 'Data was successfully written to {0}'.format(fileName)
+            return 'Data was successfully written to {0}'.format(file_name)
 
 
 # JSON
-def readJsonFile(fileName):
-    # type: (object) -> object
-    with open(fileName, 'r') as json_file:
+def read_json_file(file_name):
+    # type: (str) -> dict
+    with open(file_name, 'r') as json_file:
         try:
             data = json.load(json_file)
         except Exception as e:
-            print("Could not read {0} {1}".format(fileName, e))
+            print("Could not read {0} {1}".format(file_name, e))
         else:
             return data
+
+
 # Python 2
 def to_unicode(unicode_or_str):
     if isinstance(unicode_or_str, str):
@@ -485,6 +481,7 @@ def to_unicode(unicode_or_str):
     else:
         value = unicode_or_str
     return value  # Instance of unicode
+
 
 # Python 2
 def to_str(unicode_or_str):
@@ -495,7 +492,3 @@ def to_str(unicode_or_str):
     return value  # Instance of str
 
 # -- Utility functions End --- #
-
-test_string = 'Disco Fox'
-val1 = to_unicode(test_string)
-val2 = to_str(test_string)
